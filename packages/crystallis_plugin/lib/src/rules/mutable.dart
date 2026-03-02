@@ -57,8 +57,9 @@ class _MutableVisitor extends SimpleAstVisitor<void> {
         }
       }
     } else {
-      if (defaultConstructor != null && defaultConstructorConstKeyword == null) {
-        rule.reportAtToken(parent.namePart.typeName);
+      var token = parent.defaultConstructorFirstEntity;
+      if (defaultConstructor != null && defaultConstructorConstKeyword == null && token != null) {
+        rule.reportAtToken(token);
       } else if (defaultConstructor == null) {
         rule.reportAtToken(parent.namePart.typeName);
       }
@@ -92,29 +93,55 @@ extension on ClassDeclaration {
     return constructor?.constKeyword;
   }
 
-  List<Token> get finalFields {
-    var body = switch (this.body) {
-      EmptyClassBody() => null,
-      BlockClassBody(:final members) => members,
+  Token? get defaultConstructorFirstEntity {
+    var primary = switch (namePart) {
+      PrimaryConstructorDeclaration(:var declaredFragment?) && var constructor
+          when declaredFragment.element.isDefaultConstructor =>
+        constructor,
+      _ => null,
     };
-    if (body == null) return const [];
-    return body
-        .whereType<FieldDeclaration>()
-        .where((f) => !f.isStatic && f.fields.isFinal)
-        .map((f) => f.fields.keyword!)
-        .toList();
+    if (primary != null) return primary.typeName;
+    var constructor = switch (body) {
+      EmptyClassBody() => null,
+      BlockClassBody(:final members) => members.whereType<ConstructorDeclaration>().singleWhereOrNull(
+        (m) => m.declaredFragment?.element.isDefaultConstructor ?? false,
+      ),
+    };
+    return constructor?.newKeyword ?? constructor?.typeName?.token ?? constructor?.name;
   }
 
-  List<SyntacticEntity> get nonFinalFields {
-    var body = switch (this.body) {
-      EmptyClassBody() => null,
-      BlockClassBody(:final members) => members,
+  List<Token> get finalFields => _fields(isFinal: true).cast();
+
+  List<SyntacticEntity> get nonFinalFields => _fields(isFinal: false);
+
+  List<SyntacticEntity> _fields({required bool isFinal}) {
+    var primary = switch (namePart) {
+      PrimaryConstructorDeclaration(:var formalParameters) =>
+        formalParameters.parameters
+            .where((p) => (p.isFinal == isFinal) && p.declaredFragment?.element is FieldFormalParameterElement)
+            .map((p) {
+              if (p
+                  case DefaultFormalParameter(parameter: SimpleFormalParameter parameter) ||
+                      SimpleFormalParameter parameter) {
+                return parameter.keyword;
+              } else {
+                return null;
+              }
+            })
+            .nonNulls
+            .toList(),
+      _ => const <Token>[],
     };
-    if (body == null) return const [];
-    return body
-        .whereType<FieldDeclaration>()
-        .where((f) => !f.isStatic && !f.fields.isFinal)
-        .map((f) => f.fields.keyword ?? f.fields.type!)
-        .toList();
+    var fields = switch (this.body) {
+      EmptyClassBody() => primary,
+      BlockClassBody(:final members) => [
+        ...primary,
+        ...members
+            .whereType<FieldDeclaration>()
+            .where((f) => !f.isStatic && (f.fields.isFinal == isFinal))
+            .map((f) => f.fields.keyword ?? f.fields.type!),
+      ],
+    };
+    return fields;
   }
 }

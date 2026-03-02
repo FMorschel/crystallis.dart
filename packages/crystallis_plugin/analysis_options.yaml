@@ -1,4 +1,6 @@
-include: package:lints/recommended.yaml
+include:
+  - package:lints/recommended.yaml
+  - ../../analysis_options.yaml #plugins
 
 analyzer:
   strong-mode:
@@ -13,6 +15,12 @@ analyzer:
 linter:
   rules:
     - public_member_api_docs
+    - await_only_futures
+    - discarded_futures
+    - unawaited_futures
+    - avoid_slow_async_io
+    - avoid_void_async
+    - unnecessary_async
 
 formatter:
   page_width: 120
